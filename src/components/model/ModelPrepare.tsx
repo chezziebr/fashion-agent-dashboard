@@ -114,7 +114,7 @@ export default function ModelPrepare({ onComplete }: ModelPrepareProps) {
           message: `Processing image ${i + 1}/${selectedFiles.length}...`,
         });
 
-        const prepareRes = await fetch('/api/models/prepare', {
+        const prepareRes: Response = await fetch('/api/models/prepare', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
