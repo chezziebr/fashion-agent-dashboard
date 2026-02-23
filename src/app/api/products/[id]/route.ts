@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase';
 import { Product, ApiResponse } from '@/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // GET /api/products/[id] - Get a single product
 export async function GET(
@@ -13,6 +8,14 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -51,6 +54,14 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
 
     // Remove fields that shouldn't be updated directly
@@ -95,6 +106,14 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     // Soft delete by setting is_active to false
     const { data, error } = await supabase
       .from('products')

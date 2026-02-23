@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase';
 import { prepareModelPhoto, batchPrepareModels, ModelPrepareInput } from '@/agents/model-prepare';
 import { ApiResponse } from '@/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 interface PrepareRequest {
   image_url: string;
@@ -39,6 +34,14 @@ interface BatchPrepareRequest {
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
 
     // Check if this is a batch request
@@ -47,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Single model preparation
-    return handleSinglePrepare(body as PrepareRequest);
+    return handleSinglePrepare(body as PrepareRequest, supabase);
 
   } catch (error) {
     console.error('Model preparation error:', error);
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
 /**
  * Handle single model preparation
  */
-async function handleSinglePrepare(body: PrepareRequest) {
+async function handleSinglePrepare(body: PrepareRequest, supabase: any) {
   // Validate required fields
   if (!body.image_url || !body.model_name || !body.gender) {
     return NextResponse.json<ApiResponse<null>>(
@@ -110,7 +113,8 @@ async function handleSinglePrepare(body: PrepareRequest) {
       console.log('📤 Uploading data URL to Supabase...');
       const uploadResult = await uploadDataUrlToSupabase(
         result.studio_enhanced_url,
-        `model-${body.model_code || Date.now()}-studio.jpg`
+        `model-${body.model_code || Date.now()}-studio.jpg`,
+        supabase
       );
 
       if (uploadResult.success && uploadResult.url) {
@@ -124,7 +128,8 @@ async function handleSinglePrepare(body: PrepareRequest) {
       console.log('📥 Downloading from Replicate and uploading to Supabase...');
       const uploadResult = await downloadAndUploadToSupabase(
         result.studio_enhanced_url,
-        `model-${body.model_code || Date.now()}-studio.jpg`
+        `model-${body.model_code || Date.now()}-studio.jpg`,
+        supabase
       );
 
       if (uploadResult.success && uploadResult.url) {
@@ -267,7 +272,7 @@ async function handleBatchPrepare(body: BatchPrepareRequest) {
 /**
  * Download image from URL and upload to Supabase storage
  */
-async function downloadAndUploadToSupabase(imageUrl: string, filename: string): Promise<{
+async function downloadAndUploadToSupabase(imageUrl: string, filename: string, supabase: any): Promise<{
   success: boolean;
   url?: string;
   error?: string;
@@ -315,7 +320,7 @@ async function downloadAndUploadToSupabase(imageUrl: string, filename: string): 
 /**
  * Upload a data URL to Supabase storage
  */
-async function uploadDataUrlToSupabase(dataUrl: string, filename: string): Promise<{
+async function uploadDataUrlToSupabase(dataUrl: string, filename: string, supabase: any): Promise<{
   success: boolean;
   url?: string;
   error?: string;

@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { createServerClient } from '@/lib/supabase';
 
 // Test models with diverse representation
 const testModels = [
@@ -173,6 +168,14 @@ const standardExpressions = [
 
 export async function POST() {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const results = {
       success: [] as string[],
       errors: [] as string[],

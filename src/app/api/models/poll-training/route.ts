@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase';
 import { checkTrainingStatus } from '@/agents/lora-trainer';
 import { ApiResponse } from '@/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 /**
  * POST /api/models/poll-training
@@ -15,6 +10,14 @@ const supabase = createClient(
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
     const trainingJobId = body.training_job_id;
 

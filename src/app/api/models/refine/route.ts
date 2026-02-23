@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase';
 import Replicate from 'replicate';
 import { ApiResponse } from '@/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN!,
-});
 
 const FLUX_IMG2IMG = 'bxclib2/flux_img2img:0ce45202d83c6bd379dfe58f4c0c41e6cadf93ebbd9d938cc63cc0f2fcb729a5' as const;
 
@@ -27,6 +18,25 @@ interface RefineRequest {
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
+    if (!process.env.REPLICATE_API_TOKEN) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Replicate API not configured' },
+        { status: 500 }
+      );
+    }
+
+    const replicate = new Replicate({
+      auth: process.env.REPLICATE_API_TOKEN,
+    });
+
     const body: RefineRequest = await request.json();
 
     if (!body.model_id || !body.refinement_instructions) {
@@ -100,7 +110,8 @@ export async function POST(request: NextRequest) {
     // Download and upload to Supabase
     const uploadResult = await downloadAndUploadToSupabase(
       outputUrl,
-      `model-${body.model_id}-refined-${Date.now()}.jpg`
+      `model-${body.model_id}-refined-${Date.now()}.jpg`,
+      supabase
     );
 
     if (!uploadResult.success || !uploadResult.url) {
@@ -167,7 +178,7 @@ ${instructions}
 IMPORTANT: Make ONLY the requested changes. Keep everything else exactly the same, including the person's overall identity and appearance. These are subtle refinements, not a transformation.`;
 }
 
-async function downloadAndUploadToSupabase(imageUrl: string, filename: string): Promise<{
+async function downloadAndUploadToSupabase(imageUrl: string, filename: string, supabase: any): Promise<{
   success: boolean;
   url?: string;
   error?: string;

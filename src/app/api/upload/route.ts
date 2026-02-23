@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase';
 import { ApiResponse } from '@/types';
-
-// Create Supabase client with service role key for server-side operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const bucket = (formData.get('bucket') as string) || 'products';

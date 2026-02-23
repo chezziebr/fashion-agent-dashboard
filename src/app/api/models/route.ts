@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase';
 import { AIModel, ApiResponse } from '@/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // GET /api/models - List all AI models with poses and expressions
 export async function GET(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const gender = searchParams.get('gender');
     const includePoses = searchParams.get('include_poses') === 'true';
@@ -85,6 +88,14 @@ export async function GET(request: NextRequest) {
 // POST /api/models - Create a new AI model
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
 
     // Validate required fields
@@ -140,6 +151,14 @@ export async function POST(request: NextRequest) {
 // PATCH /api/models - Update model (archive/unarchive)
 export async function PATCH(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
 
     if (!body.id) {
@@ -193,6 +212,14 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/models?id=xxx - Delete a model permanently
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 

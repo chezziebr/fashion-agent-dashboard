@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase';
 import { extractGarment } from '@/agents/garment-extract';
 import { ApiResponse } from '@/types';
 
@@ -7,12 +7,6 @@ import { ApiResponse } from '@/types';
 // Vercel limits: Hobby = 10s, Pro = 60s, Enterprise = 300s
 // Set to 60 for Pro tier (adjust to 10 if on Hobby tier)
 export const maxDuration = 60; // 60 seconds - enough for ~10 parallel extractions
-
-// Create Supabase client with service role key for server-side operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 interface ExtractionRequest {
   product_ids: string[];  // Array of product IDs to extract
@@ -31,6 +25,14 @@ interface ExtractionResult {
 // POST /api/products/extract - Extract garments from product images
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const body: ExtractionRequest = await request.json();
 
     if (!body.product_ids || !Array.isArray(body.product_ids) || body.product_ids.length === 0) {
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Process extractions in PARALLEL for better performance
     // This allows multiple Replicate API calls to run concurrently
     const results: ExtractionResult[] = await Promise.all(
-      products.map(async (product) => {
+      products.map(async (product: { id: string; sku: string; original_image_url: string; garment_type: string }) => {
         try {
           // Update status to processing
           await supabase
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
           // Run extraction
           const extractionResult = await extractGarment({
             image_url: product.original_image_url,
-            garment_type: body.garment_type || product.garment_type || 'auto',
+            garment_type: (body.garment_type || product.garment_type || 'auto') as 'auto' | 'upper' | 'lower' | 'full',
             remove_background: body.remove_background ?? true,
           });
 
@@ -157,6 +159,14 @@ export async function POST(request: NextRequest) {
 // GET /api/products/extract - Get extraction status summary
 export async function GET(request: NextRequest) {
   try {
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status'); // pending, processing, completed, failed
 
@@ -186,10 +196,10 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true);
 
     const counts = {
-      pending: countData?.filter(p => p.extraction_status === 'pending').length || 0,
-      processing: countData?.filter(p => p.extraction_status === 'processing').length || 0,
-      completed: countData?.filter(p => p.extraction_status === 'completed').length || 0,
-      failed: countData?.filter(p => p.extraction_status === 'failed').length || 0,
+      pending: countData?.filter((p: { extraction_status: string }) => p.extraction_status === 'pending').length || 0,
+      processing: countData?.filter((p: { extraction_status: string }) => p.extraction_status === 'processing').length || 0,
+      completed: countData?.filter((p: { extraction_status: string }) => p.extraction_status === 'completed').length || 0,
+      failed: countData?.filter((p: { extraction_status: string }) => p.extraction_status === 'failed').length || 0,
     };
 
     return NextResponse.json<ApiResponse<any>>(

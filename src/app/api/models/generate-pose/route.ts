@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import Replicate from 'replicate';
 import { ApiResponse } from '@/types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN!,
-});
+import { createServerClient } from '@/lib/supabase';
 
 // ControlNet Union Pro for pose control with face preservation
 const CONTROLNET_MODEL = 'lucataco/controlnet-union-pro:bd0dacc60e6247a2a4c28502434a6d6dd5d63f93c39950e5f366775d7a9b114a' as const;
@@ -33,6 +24,25 @@ interface GeneratePoseRequest {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Check if environment variables are configured
+    const replicateToken = process.env.REPLICATE_API_TOKEN;
+    if (!replicateToken) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Replicate API token not configured' },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
+    const replicate = new Replicate({ auth: replicateToken });
+
     const body: GeneratePoseRequest = await request.json();
 
     // Validate required fields
@@ -80,6 +90,7 @@ export async function POST(request: NextRequest) {
           model.lora_trigger_word,
           model.lora_weights_url,
           prompt,
+          replicate,
           body.transformation_strength || 0.40 // Can use higher strength with LoRA!
         );
       } catch (loraError) {
@@ -89,7 +100,8 @@ export async function POST(request: NextRequest) {
         generatedImageUrl = await generatePoseWithControlNet(
           referenceImageUrl,
           prompt,
-          body.transformation_strength || 0.20
+          body.transformation_strength || 0.20,
+          replicate
         );
       }
     } else if (body.use_controlnet !== false) {
@@ -97,14 +109,16 @@ export async function POST(request: NextRequest) {
       generatedImageUrl = await generatePoseWithControlNet(
         referenceImageUrl,
         prompt,
-        body.transformation_strength || 0.20 // Very low to preserve facial features
+        body.transformation_strength || 0.20, // Very low to preserve facial features
+        replicate
       );
     } else {
       // Use plain FLUX img2img (cheaper, less face preservation)
       generatedImageUrl = await generatePoseWithFlux(
         referenceImageUrl,
         prompt,
-        body.transformation_strength || 0.15 // Even lower for FLUX since it tends to change more
+        body.transformation_strength || 0.15, // Even lower for FLUX since it tends to change more
+        replicate
       );
     }
 
@@ -113,7 +127,8 @@ export async function POST(request: NextRequest) {
     // Download and upload to Supabase
     const uploadResult = await downloadAndUploadToSupabase(
       generatedImageUrl,
-      `model-${body.model_id}-pose-${body.pose}-${Date.now()}.jpg`
+      `model-${body.model_id}-pose-${body.pose}-${Date.now()}.jpg`,
+      supabase
     );
 
     if (!uploadResult.success || !uploadResult.url) {
@@ -181,7 +196,7 @@ export async function POST(request: NextRequest) {
  * Convert RGBA image to RGB by compositing onto white background
  * ControlNet expects 3-channel RGB images, not 4-channel RGBA
  */
-async function convertRgbaToRgb(imageUrl: string): Promise<string> {
+async function convertRgbaToRgb(imageUrl: string, replicate: any): Promise<string> {
   console.log('🔄 Converting RGBA to RGB (removing alpha channel)...');
 
   // Use a simple image processing model to composite RGBA onto white
@@ -240,6 +255,7 @@ async function generatePoseWithLoRA(
   triggerWord: string,
   loraWeightsUrl: string,
   prompt: string,
+  replicate: any,
   strength: number = 0.4
 ): Promise<string> {
   console.log('✨ Using trained LoRA for pose generation...');
@@ -299,13 +315,14 @@ async function generatePoseWithLoRA(
 async function generatePoseWithControlNet(
   imageUrl: string,
   prompt: string,
-  strength: number
+  strength: number,
+  replicate: any
 ): Promise<string> {
   console.log('🎨 Using ControlNet Union Pro for pose generation...');
   console.log('🔧 Control strength:', strength);
 
   // Convert RGBA to RGB before sending to ControlNet
-  const rgbImageUrl = await convertRgbaToRgb(imageUrl);
+  const rgbImageUrl = await convertRgbaToRgb(imageUrl, replicate);
 
   const output = await replicate.run(CONTROLNET_MODEL, {
     input: {
@@ -351,7 +368,8 @@ async function generatePoseWithControlNet(
 async function generatePoseWithFlux(
   imageUrl: string,
   prompt: string,
-  strength: number
+  strength: number,
+  replicate: any
 ): Promise<string> {
   console.log('🎨 Using FLUX img2img for pose generation...');
   console.log('🔧 Denoising strength:', strength);
@@ -459,7 +477,11 @@ IMPORTANT: This must be the EXACT SAME person with IDENTICAL facial features. On
 /**
  * Download image from URL and upload to Supabase storage
  */
-async function downloadAndUploadToSupabase(imageUrl: string, filename: string): Promise<{
+async function downloadAndUploadToSupabase(
+  imageUrl: string,
+  filename: string,
+  supabase: any
+): Promise<{
   success: boolean;
   url?: string;
   error?: string;
