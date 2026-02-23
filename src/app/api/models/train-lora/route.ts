@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔑 Trigger word: ${triggerWord}`);
 
     // Create or get model record
-    let modelId = body.model_id;
+    let modelId: string = body.model_id || '';
     let modelCode: string;
 
     if (!modelId) {
