@@ -16,11 +16,5 @@
       "schedule": "*/5 * * * *"
     }
   ],
-  "env": {
-    "ANTHROPIC_API_KEY": "@anthropic-api-key",
-    "REPLICATE_API_TOKEN": "@replicate-api-token",
-    "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-role-key"
-  }
+  "env": {}
 }
